@@ -1,10 +1,10 @@
 {
-  "name": "plugin-template",
+  "name": "plugin-typesafe",
   "build": {
     "context": ".",
     "dockerfile": "Dockerfile"
   },
-  "workspaceFolder": "/workspaces/plugin-template",
+  "workspaceFolder": "/workspaces/plugin-typesafe",
   "forwardPorts": [8080],
   "customizations": {
     "vscode": {
