@@ -106,30 +106,39 @@ public class Evaluate extends AbstractTypeSafe implements RunnableTask<Evaluate.
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        trackRunThread();
-        try {
-            RenderedShared shared = renderShared(runContext);
-            Object rState = runContext.render(this.state).as(Object.class).orElseThrow();
-            validateQuestions(shared.questions());
+        RenderedShared shared = renderShared(runContext);
+        Object rState = this.state == null
+            ? orThrowStateEmpty()
+            : runContext.render(this.state).as(Object.class)
+                .filter(value -> !(value instanceof String str && str.isBlank()))
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "Invalid 'state': the content to evaluate is empty. Fix: set 'state' to a valid string, object or array, "
+                        + "e.g. `state: \"Help! My payouts have been failing for 3 days.\"`."
+                ));
+        validateQuestions(shared.questions());
 
-            HttpClient client = newClient(runContext);
-            try {
-                TypeSafeResponse response = evaluateState(
-                    runContext, client,
-                    shared.baseUrl(), shared.apiKey(), shared.model(),
-                    rState, shared.questions()
-                );
-                emitUsageMetrics(runContext, response.getUsage());
-                return Output.builder()
-                    .answers(response.getAnswers())
-                    .model(response.getModel())
-                    .build();
-            } finally {
-                releaseClient();
-            }
+        HttpClient client = newClient(runContext);
+        try {
+            TypeSafeResponse response = evaluateState(
+                runContext, client,
+                shared.baseUrl(), shared.apiKey(), shared.model(),
+                rState, shared.questions()
+            );
+            emitUsageMetrics(runContext, response.getUsage());
+            return Output.builder()
+                .answers(response.getAnswers())
+                .model(response.getModel())
+                .build();
         } finally {
-            untrackRunThread();
+            releaseClient();
         }
+    }
+
+    private static Object orThrowStateEmpty() {
+        throw new IllegalArgumentException(
+            "Invalid 'state': the content to evaluate is empty. Fix: set 'state' to a valid string, object or array, "
+                + "e.g. `state: \"Help! My payouts have been failing for 3 days.\"`."
+        );
     }
 
     @lombok.Builder

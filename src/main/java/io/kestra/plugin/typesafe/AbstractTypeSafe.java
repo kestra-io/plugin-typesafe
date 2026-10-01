@@ -119,29 +119,21 @@ public abstract class AbstractTypeSafe extends Task {
     @Getter(AccessLevel.NONE)
     private final AtomicReference<HttpClient> activeClient = new AtomicReference<>();
 
-    @Getter(AccessLevel.NONE)
-    private volatile Thread runThread;
-
     /**
-     * Cancels in-flight work. Satisfies {@link io.kestra.core.models.WorkerJobLifecycle#kill()}
+     * Requests cancellation of in-flight work. Satisfies {@link io.kestra.core.models.WorkerJobLifecycle#kill()}
      * for subclasses implementing {@code RunnableTask}; declared here so cancellation resources
      * can be shared.
      *
-     * <p>Note: There is a small race window between {@code trackRunThread()} and the actual
-     * work starting where {@code kill()} might miss the thread or interrupt a stale reference.
-     * However, this is mitigated by: (1) the race window is extremely small (between
-     * {@code trackRunThread()} and actual work start), (2) {@code isKilled()} also checks
-     * {@code Thread.currentThread().isInterrupted()}, and (3) {@code checkKilled()} throws
-     * {@code KilledException} which is caught by the task's exception handling. Given the
-     * narrow window and existing safeguards, this is considered an acceptable risk without
-     * adding complex synchronization.
+     * <p>Cooperative cancellation: this only sets the {@code killed} flag and closes the shared
+     * HTTP client (which unblocks the synchronous Apache-based calls used by {@link #evaluateState}).
+     * It deliberately does not interrupt any thread: the worker interrupts the run thread after
+     * {@code kill()} returns, and the run thread observes cancellation via {@link #isKilled()} /
+     * {@link #checkKilled()}, the interrupt flag, or the closed client. Touching futures or the
+     * batch executor here would race with the run thread's own bookkeeping, so {@code EvaluateBatch}
+     * lets the interrupted {@code Future.get()} unwind and shuts down in its existing {@code finally} block.
      */
     public void kill() {
         killed.set(true);
-        Thread thread = runThread;
-        if (thread != null) {
-            thread.interrupt();
-        }
         releaseClient();
         onKill();
     }
@@ -162,14 +154,6 @@ public abstract class AbstractTypeSafe extends Task {
         if (isKilled()) {
             throw new KilledException("TypeSafe task was killed.");
         }
-    }
-
-    protected void trackRunThread() {
-        runThread = Thread.currentThread();
-    }
-
-    protected void untrackRunThread() {
-        runThread = null;
     }
 
     protected HttpClient newClient(RunContext runContext) throws IllegalVariableEvaluationException {
@@ -265,7 +249,28 @@ public abstract class AbstractTypeSafe extends Task {
                 .run((res, err) -> totalAttempts.get() < MAX_ATTEMPTS && isRetryableWithoutRetryAfter(err), () -> {
                     return executeRequestWithRetryAfterHandling(runContext, client, request, totalAttempts);
                 });
+        } catch (KilledException e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (isKilled()) {
+                throw new KilledException("TypeSafe task was killed.");
+            }
+            throw e;
         } catch (RetryUtils.RetryFailed e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof KilledException killedException) {
+                throw killedException;
+            }
+            if (cause instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                if (isKilled()) {
+                    throw new KilledException("TypeSafe task was killed.");
+                }
+            }
+            if (isKilled() && isKillRelated(cause)) {
+                throw new KilledException("TypeSafe task was killed.");
+            }
             throw exhausted(e);
         } catch (HttpClientResponseException e) {
             // Retry-After exhaustion already consumed the shared budget inside
@@ -281,6 +286,13 @@ public abstract class AbstractTypeSafe extends Task {
                 );
             }
             throw mapStatusError(e);
+        } catch (Exception e) {
+            // A kill closes the shared client while a request is in flight; the resulting
+            // transport error must surface as cancellation, not as an ordinary failure.
+            if (isKilled() && isKillRelated(e)) {
+                throw new KilledException("TypeSafe task was killed.");
+            }
+            throw e;
         }
 
         String responseBody = response.getBody();
@@ -348,16 +360,69 @@ public abstract class AbstractTypeSafe extends Task {
                             throw e;
                         }
                         // Server provided Retry-After: wait exactly that long, then retry immediately
-                        // (no additional exponential backoff - the server-provided delay replaces it)
-                        waitForRetryAfter(runContext.logger(), e);
+                        // (no additional exponential backoff - the server-provided delay replaces it).
+                        // The wait itself polls isKilled(); a worker interrupt surfaces as
+                        // InterruptedException, which must become cancellation, not a retry.
+                        try {
+                            waitForRetryAfter(runContext.logger(), e);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new KilledException("TypeSafe task was killed.");
+                        }
                         continue; // Retry immediately after waiting
                     }
                 }
                 // For other retryable errors (network issues, 429/529 without Retry-After),
                 // propagate to RetryUtils which will apply exponential backoff
                 throw e;
+            } catch (Exception e) {
+                // Closed-client transport errors after a kill must not be retried as ordinary failures.
+                if (isKilled() && isKillRelated(e)) {
+                    throw new KilledException("TypeSafe task was killed.");
+                }
+                throw e;
             }
         }
+    }
+
+    /**
+     * Returns true when the throwable (or any cause in its chain) looks like a transport failure
+     * caused by closing the shared client or interrupting the thread during cancellation.
+     */
+    private boolean isKillRelated(Throwable err) {
+        for (Throwable current = err; current != null; current = current.getCause()) {
+            if (current instanceof KilledException
+                || current instanceof InterruptedException
+                || current instanceof java.io.InterruptedIOException
+                || current instanceof java.nio.channels.ClosedChannelException
+                || current instanceof java.nio.channels.ClosedByInterruptException
+                || current instanceof java.nio.channels.AsynchronousCloseException) {
+                return true;
+            }
+            if (current instanceof HttpClientRequestException
+                || current instanceof SocketException
+                || current instanceof IOException) {
+                return true;
+            }
+            if (current instanceof IllegalStateException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null) {
+                String lower = message.toLowerCase(Locale.ROOT);
+                if (lower.contains("closed")
+                    || lower.contains("close")
+                    || lower.contains("shut down")
+                    || lower.contains("shutdown")
+                    || lower.contains("interrupted")
+                    || lower.contains("interrupt")
+                    || lower.contains("cancelled")
+                    || lower.contains("canceled")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -610,13 +675,42 @@ public abstract class AbstractTypeSafe extends Task {
     /**
      * Renders the shared properties. The {@code questions} map entries are rendered with their
      * nested {@link Question} fields.
+     *
+     * <p>Optional properties ({@code baseUrl}, {@code model}) fall back to their defaults when
+     * omitted; a descriptive {@link IllegalArgumentException} is thrown only when a required
+     * value is missing or an explicitly provided value renders to empty.
      */
     protected RenderedShared renderShared(RunContext runContext) throws IllegalVariableEvaluationException {
-        String rApiKey = runContext.render(this.apiKey).as(String.class).orElseThrow();
-        String rBaseUrl = runContext.render(this.baseUrl).as(String.class).orElseThrow();
-        String rModel = runContext.render(this.model).as(String.class).orElseThrow();
+        String rApiKey = this.apiKey == null
+            ? orThrowApiKeyEmpty()
+            : runContext.render(this.apiKey).as(String.class)
+                .filter(value -> !value.isBlank())
+                .orElseGet(AbstractTypeSafe::orThrowApiKeyEmpty);
+        String rBaseUrl = this.baseUrl == null
+            ? DEFAULT_BASE_URL
+            : runContext.render(this.baseUrl).as(String.class)
+                .filter(value -> !value.isBlank())
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "Invalid 'baseUrl': the TypeSafe base URL is empty. Fix: set 'baseUrl' to the API base URL "
+                        + "(e.g. \"https://api.typesafe.ai\") or remove it to use the default \"" + DEFAULT_BASE_URL + "\"."
+                ));
+        String rModel = this.model == null
+            ? DEFAULT_MODEL
+            : runContext.render(this.model).as(String.class)
+                .filter(value -> !value.isBlank())
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "Invalid 'model': the model is empty. Fix: set 'model' to the model that handles the request "
+                        + "(e.g. `jev-latest`) or remove it to use the default \"" + DEFAULT_MODEL + "\"."
+                ));
         Map<String, Question> rQuestions = runContext.render(this.questions).asMap(String.class, Question.class);
         return new RenderedShared(rApiKey, rBaseUrl, rModel, rQuestions);
+    }
+
+    private static String orThrowApiKeyEmpty() {
+        throw new IllegalArgumentException(
+            "Invalid 'apiKey': the TypeSafe API key is missing or empty. Fix: set 'apiKey' to your Bearer token, "
+                + "e.g. \"{{ secret('TYPESAFE_API_KEY') }}\"."
+        );
     }
 
     protected record RenderedShared(String apiKey, String baseUrl, String model, Map<String, Question> questions) {

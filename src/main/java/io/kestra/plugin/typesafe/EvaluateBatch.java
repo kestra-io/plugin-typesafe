@@ -40,8 +40,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
@@ -142,58 +140,32 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
     @PluginProperty(group = "execution")
     private Property<@Min(1) @Max(20) Integer> concurrency = Property.ofValue(DEFAULT_CONCURRENCY);
 
-    @Getter(AccessLevel.NONE)
-    private volatile ExecutorService executor;
-
-    @Getter(AccessLevel.NONE)
-    private volatile List<Future<RecordResult>> futures;
-
-    @Override
-    protected void onKill() {
-        List<Future<RecordResult>> pending = futures;
-        if (pending != null) {
-            for (Future<RecordResult> future : pending) {
-                future.cancel(true);
-            }
-        }
-        ExecutorService current = executor;
-        if (current != null) {
-            current.shutdownNow();
-        }
-    }
-
     @Override
     public Output run(RunContext runContext) throws Exception {
-        trackRunThread();
-        try {
-            RenderedShared shared = renderShared(runContext);
-            int rConcurrency = runContext.render(this.concurrency).as(Integer.class).orElse(DEFAULT_CONCURRENCY);
-            if (rConcurrency < 1 || rConcurrency > MAX_CONCURRENCY) {
-                throw new IllegalArgumentException(
-                    "Invalid 'concurrency': " + rConcurrency + ". Fix: set 'concurrency' to a value between 1 and " + MAX_CONCURRENCY + "."
-                );
-            }
-            if (from == null) {
-                throw new IllegalArgumentException(
-                    "Invalid 'from': the batch input is missing. Fix: set 'from' to a list of records or an internal storage URI."
-                );
-            }
-            validateQuestions(shared.questions());
-
-            ExecutorService current = Executors.newFixedThreadPool(
-                rConcurrency,
-                Thread.ofPlatform().name("typesafe-evaluate-", 0).daemon(true).factory()
+        RenderedShared shared = renderShared(runContext);
+        int rConcurrency = runContext.render(this.concurrency).as(Integer.class).orElse(DEFAULT_CONCURRENCY);
+        if (rConcurrency < 1 || rConcurrency > MAX_CONCURRENCY) {
+            throw new IllegalArgumentException(
+                "Invalid 'concurrency': " + rConcurrency + ". Fix: set 'concurrency' to a value between 1 and " + MAX_CONCURRENCY + "."
             );
-            executor = current;
-            HttpClient client = newClient(runContext);
-            try {
-                return runBounded(runContext, current, client, shared, rConcurrency);
-            } finally {
-                shutdown(current);
-                releaseClient();
-            }
+        }
+        if (from == null) {
+            throw new IllegalArgumentException(
+                "Invalid 'from': the batch input is missing. Fix: set 'from' to a list of records or an internal storage URI."
+            );
+        }
+        validateQuestions(shared.questions());
+
+        ExecutorService current = Executors.newFixedThreadPool(
+            rConcurrency,
+            Thread.ofPlatform().name("typesafe-evaluate-", 0).daemon(true).factory()
+        );
+        HttpClient client = newClient(runContext);
+        try {
+            return runBounded(runContext, current, client, shared, rConcurrency);
         } finally {
-            untrackRunThread();
+            shutdown(current);
+            releaseClient();
         }
     }
 
@@ -221,7 +193,6 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
 
         Map<Integer, Future<RecordResult>> pending = new LinkedHashMap<>();
         List<Future<RecordResult>> killable = new CopyOnWriteArrayList<>();
-        futures = killable;
         Iterator<Object> iterator;
         try {
             iterator = readRecords(runContext).toIterable().iterator();
@@ -271,7 +242,7 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
                 try {
                     result = takeInOrder(nextToWrite, earliest);
                 } catch (Exception e) {
-                    cancelPendingAfter(pending, killable, nextToWrite);
+                    cancelPendingAfter(current, pending, killable, nextToWrite);
                     throw e;
                 }
                 Map<String, Object> line = new LinkedHashMap<>();
@@ -396,6 +367,12 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
             if (cause instanceof KilledException killedException) {
                 throw killedException;
             }
+            if (cause instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                if (isKilled()) {
+                    throw new KilledException("TypeSafe batch evaluation was killed.");
+                }
+            }
             if (cause instanceof Exception exception) {
                 throw exception;
             }
@@ -404,6 +381,7 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
     }
 
     private void cancelPendingAfter(
+        ExecutorService current,
         Map<Integer, Future<RecordResult>> pending,
         List<Future<RecordResult>> killable,
         int failedIndex
@@ -414,10 +392,7 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
                 killable.remove(entry.getValue());
             }
         }
-        ExecutorService current = executor;
-        if (current != null) {
-            current.shutdownNow();
-        }
+        current.shutdownNow();
     }
 
     private void shutdown(ExecutorService current) {

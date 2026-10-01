@@ -320,6 +320,8 @@ class EvaluateBatchTest {
         waitForRequests(2, 15000);
         long killAt = System.currentTimeMillis();
         task.kill();
+        // Simulate the worker, which interrupts the run thread after kill() returns.
+        thread.interrupt();
         thread.join(15000);
 
         assertThat(thread.isAlive(), is(false));
@@ -347,12 +349,59 @@ class EvaluateBatchTest {
         waitForRequests(1, 15000);
         long killAt = System.currentTimeMillis();
         task.kill();
+        // Simulate the worker, which interrupts the run thread after kill() returns.
+        thread.interrupt();
         thread.join(15000);
 
         assertThat(thread.isAlive(), is(false));
         assertThat(thrown.get(), instanceOf(KilledException.class));
         // The 30s retry-after wait must not be observed; cancellation wins promptly.
         assertThat(System.currentTimeMillis() - killAt < 14000, is(true));
+    }
+
+    @Test
+    void killStopsFurtherSubmissions() throws Exception {
+        // Repeated to expose timing-sensitive races: each iteration must end KILLED with no
+        // records submitted after the kill beyond the already in-flight window.
+        for (int round = 0; round < 3; round++) {
+            server.resetAll();
+            server.stubFor(post(urlEqualTo("/v1/systemone"))
+                .willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY).withFixedDelay(2000)));
+
+            java.util.List<String> records = new java.util.ArrayList<>();
+            for (int i = 0; i < 12; i++) {
+                records.add("record-" + i);
+            }
+
+            EvaluateBatch task = batchTask(records, 2);
+            RunContext runContext = runContextFactory.of();
+            AtomicReference<Throwable> thrown = new AtomicReference<>();
+            Thread thread = Thread.ofVirtual().start(() -> {
+                try {
+                    task.run(runContext);
+                } catch (Throwable e) {
+                    thrown.set(e);
+                }
+            });
+
+            waitForRequests(2, 15000);
+            task.kill();
+            // Snapshot immediately: the run thread may still be unwinding, so only the
+            // already in-flight window (at most `concurrency` requests) may still arrive.
+            int atKill = server.getAllServeEvents().size();
+            // Simulate the worker, which interrupts the run thread after kill() returns.
+            thread.interrupt();
+            thread.join(15000);
+
+            assertThat("round " + round + ": run thread stopped", thread.isAlive(), is(false));
+            assertThat("round " + round + ": killed", thrown.get(), instanceOf(KilledException.class));
+            // The bounded window (concurrency 2) stops the run far short of the dataset.
+            assertThat("round " + round + ": stopped early", atKill < records.size(), is(true));
+            assertThat(
+                "round " + round + ": no submissions beyond the in-flight window after kill",
+                server.getAllServeEvents().size() <= atKill + 2, is(true)
+            );
+        }
     }
 
     @Test

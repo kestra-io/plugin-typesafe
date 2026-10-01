@@ -1,6 +1,6 @@
 package io.kestra.plugin.typesafe;
 
-import java.util.List;
+import java.time.Duration;
 import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
@@ -11,11 +11,9 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 
 import io.kestra.core.junit.annotations.KestraTest;
+import io.kestra.core.junit.annotations.LoadFlows;
 import io.kestra.core.models.executions.Execution;
-import io.kestra.core.models.flows.Flow;
 import io.kestra.core.models.flows.State;
-import io.kestra.core.models.property.Property;
-import io.kestra.core.repositories.FlowRepositoryInterface;
 import io.kestra.core.runners.TestRunnerUtils;
 
 import jakarta.inject.Inject;
@@ -26,14 +24,15 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
 
 /**
  * Executes plugin tasks through the real in-memory runner, verifying task registration,
- * flow-level YAML-style configuration and execution outputs.
+ * flow-level YAML configuration and execution outputs.
+ *
+ * <p>Flows live in {@code src/test/resources/flows} and are loaded/executed through Kestra's
+ * {@code @LoadFlows} test utility, so the YAML is deserialized by Kestra (not merely parsed)
+ * and run end-to-end. The WireMock base URL is passed as a flow input.
  */
 @KestraTest(startRunner = true)
 class TypeSafeRunnerTest {
@@ -49,9 +48,6 @@ class TypeSafeRunnerTest {
 
     @Inject
     private TestRunnerUtils runnerUtils;
-
-    @Inject
-    private FlowRepositoryInterface flowRepository;
 
     private WireMockServer server;
 
@@ -69,30 +65,12 @@ class TypeSafeRunnerTest {
     }
 
     @Test
+    @LoadFlows("flows/typesafe-evaluate.yaml")
     void evaluateFlow() throws Exception {
-        Evaluate evaluate = Evaluate.builder()
-            .id("evaluate")
-            .type(Evaluate.class.getName())
-            .apiKey(Property.ofValue("test-key"))
-            .baseUrl(Property.ofValue(server.baseUrl()))
-            .model(Property.ofValue("jev-latest"))
-            .state(Property.ofValue("Help! My payouts have been failing for 3 days."))
-            .questions(Property.ofValue(Map.of(
-                "is_urgent", Question.builder()
-                    .type(QuestionType.NOUL)
-                    .instructions("Does this convey urgency?")
-                    .build()
-            )))
-            .build();
-
-        Flow flow = Flow.builder()
-            .id("typesafe-evaluate")
-            .namespace("io.kestra.tests")
-            .tasks(List.of(evaluate))
-            .build();
-        flowRepository.create(io.kestra.core.models.flows.GenericFlow.of(flow));
-
-        Execution execution = runnerUtils.runOne(null, "io.kestra.tests", "typesafe-evaluate");
+        Execution execution = runnerUtils.runOne(
+            "main", "io.kestra.tests", "typesafe-evaluate", null,
+            (f, e) -> Map.of("baseUrl", server.baseUrl())
+        );
 
         assertThat(execution.getState().getCurrent(), is(State.Type.SUCCESS));
         assertThat(execution.getTaskRunList().size(), is(1));
@@ -104,34 +82,10 @@ class TypeSafeRunnerTest {
     }
 
     @Test
+    @LoadFlows("flows/typesafe-upstream.yaml")
     void evaluateWithUpstreamQuestions() throws Exception {
-        String flowSource = """
-            id: typesafe-upstream
-            namespace: io.kestra.tests
-
-            inputs:
-              - id: baseUrl
-                type: STRING
-
-            tasks:
-              - id: producer
-                type: io.kestra.plugin.core.output.OutputValues
-                values:
-                  is_urgent:
-                    type: noul
-                    instructions: Does this convey urgency?
-              - id: evaluate
-                type: io.kestra.plugin.typesafe.Evaluate
-                apiKey: test-key
-                baseUrl: "{{ inputs.baseUrl }}"
-                model: jev-latest
-                state: Help! My payouts have been failing for 3 days.
-                questions: "{{ outputs.producer.values }}"
-            """;
-        flowRepository.create(io.kestra.core.models.flows.GenericFlow.fromYaml(null, flowSource));
-
         Execution execution = runnerUtils.runOne(
-            null, "io.kestra.tests", "typesafe-upstream", null,
+            "main", "io.kestra.tests", "typesafe-upstream", null,
             (f, e) -> Map.of("baseUrl", server.baseUrl())
         );
 
@@ -159,32 +113,12 @@ class TypeSafeRunnerTest {
     }
 
     @Test
+    @LoadFlows("flows/typesafe-batch.yaml")
     void evaluateBatchFlow() throws Exception {
-        EvaluateBatch batch = EvaluateBatch.builder()
-            .id("batch")
-            .type(EvaluateBatch.class.getName())
-            .apiKey(Property.ofValue("test-key"))
-            .baseUrl(Property.ofValue(server.baseUrl()))
-            .model(Property.ofValue("jev-latest"))
-            .from(List.of("first", "second"))
-            .concurrency(Property.ofValue(2))
-            .questions(Property.ofValue(Map.of(
-                "is_urgent", Question.builder()
-                    .type(QuestionType.NOUL)
-                    .instructions("Does this convey urgency?")
-                    .build()
-            )))
-            .build();
-
-        Flow flow = Flow.builder()
-            .id("typesafe-batch")
-            .namespace("io.kestra.tests")
-            .tenantId("test-tenant")
-            .tasks(List.of(batch))
-            .build();
-        flowRepository.create(io.kestra.core.models.flows.GenericFlow.of(flow));
-
-        Execution execution = runnerUtils.runOne("test-tenant", "io.kestra.tests", "typesafe-batch");
+        Execution execution = runnerUtils.runOne(
+            "main", "io.kestra.tests", "typesafe-batch", null,
+            (f, e) -> Map.of("baseUrl", server.baseUrl())
+        );
 
         assertThat(execution.getState().getCurrent(), is(State.Type.SUCCESS));
 
@@ -192,6 +126,32 @@ class TypeSafeRunnerTest {
         assertThat(outputs.get("count"), is(2));
         assertThat(outputs.get("model"), is("jev-1.13.0"));
         assertThat(outputs.get("uri").toString().startsWith("kestra://"), is(true));
+    }
+
+    @Test
+    @LoadFlows("flows/typesafe-batch-kill.yaml")
+    void evaluateBatchKillEndsKilled() throws Exception {
+        // Regression test for the kill race: a slow batch killed mid-flight through the
+        // worker must terminate as KILLED, not FAILED. Twelve records with an 8s mock
+        // delay (concurrency 2) keep the execution RUNNING long enough to kill it.
+        server.resetAll();
+        server.stubFor(post(urlEqualTo("/v1/systemone"))
+            .willReturn(aResponse().withStatus(200).withBody(RESPONSE_BODY).withFixedDelay(8000)));
+
+        Execution running = runnerUtils.runOneUntilRunning(
+            "main", "io.kestra.tests", "typesafe-batch-kill", null,
+            (f, e) -> Map.of("baseUrl", server.baseUrl()),
+            Duration.ofSeconds(60)
+        );
+
+        Execution killed = runnerUtils.killExecution(running);
+        Execution terminal = runnerUtils.awaitExecution(
+            execution -> execution.getState().isTerminated(),
+            killed,
+            Duration.ofSeconds(60)
+        );
+
+        assertThat(terminal.getState().getCurrent(), is(State.Type.KILLED));
     }
 
     @SuppressWarnings("unchecked")

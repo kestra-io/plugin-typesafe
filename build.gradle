@@ -29,7 +29,7 @@ java {
 }
 
 group = "io.kestra.plugin"
-description = 'Typesafe plugin for Kestra'
+description = 'TypeSafe plugin for Kestra'
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
@@ -154,7 +154,7 @@ jar {
     manifest {
         attributes(
             "X-Kestra-Name": project.name,
-            "X-Kestra-Title": "Typesafe",
+            "X-Kestra-Title": "TypeSafe",
             "X-Kestra-Group": project.group + ".typesafe",
             "X-Kestra-Description": project.description,
             "X-Kestra-Version": project.version

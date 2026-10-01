@@ -653,6 +653,177 @@ class EvaluateTest {
         server.verify(1, postRequestedFor(urlEqualTo("/v1/systemone")));
     }
 
+    @Test
+    void emptyStateIsRejectedWithGuidance() {
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(API_KEY))
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue(""))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> task.run(runContextFactory.of()));
+
+        assertThat(e.getMessage(), containsString("'state'"));
+        assertThat(e.getMessage(), containsString("string, object or array"));
+        server.verify(0, postRequestedFor(urlEqualTo("/v1/systemone")));
+    }
+
+    @Test
+    void nullStateIsRejectedWithGuidance() {
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(API_KEY))
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .state(null)
+            .questions(Property.ofValue(questions))
+            .build();
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> task.run(runContextFactory.of()));
+
+        assertThat(e.getMessage(), containsString("'state'"));
+        server.verify(0, postRequestedFor(urlEqualTo("/v1/systemone")));
+    }
+
+    @Test
+    void emptyApiKeyIsRejectedWithGuidance() {
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(""))
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> task.run(runContextFactory.of()));
+
+        assertThat(e.getMessage(), containsString("'apiKey'"));
+        assertThat(e.getMessage(), containsString("secret('TYPESAFE_API_KEY')"));
+        server.verify(0, postRequestedFor(urlEqualTo("/v1/systemone")));
+    }
+
+    @Test
+    void emptyBaseUrlIsRejectedWithGuidance() {
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(API_KEY))
+            .baseUrl(Property.ofValue("  "))
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> task.run(runContextFactory.of()));
+
+        assertThat(e.getMessage(), containsString("'baseUrl'"));
+        server.verify(0, postRequestedFor(urlEqualTo("/v1/systemone")));
+    }
+
+    @Test
+    void emptyModelIsRejectedWithGuidance() {
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(API_KEY))
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue(""))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> task.run(runContextFactory.of()));
+
+        assertThat(e.getMessage(), containsString("'model'"));
+        server.verify(0, postRequestedFor(urlEqualTo("/v1/systemone")));
+    }
+
+    @Test
+    void omittedOptionalPropertiesUseDefaults() throws Exception {
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(API_KEY))
+            .baseUrl(null)
+            .model(null)
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        AbstractTypeSafe.RenderedShared shared = task.renderShared(runContext);
+
+        assertThat(shared.baseUrl(), is("https://api.typesafe.ai"));
+        assertThat(shared.model(), is("jev-latest"));
+        assertThat(shared.apiKey(), is(API_KEY));
+    }
+
+    @Test
+    void killDuringRequestSurfacesKilled() throws Exception {
+        server.stubFor(post(urlEqualTo("/v1/systemone"))
+            .willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY).withFixedDelay(8000)));
+
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .apiKey(Property.ofValue(API_KEY))
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        RunContext runContext = runContextFactory.of();
+        java.util.concurrent.atomic.AtomicReference<Throwable> thrown = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread thread = Thread.ofVirtual().start(() -> {
+            try {
+                task.run(runContext);
+            } catch (Throwable e) {
+                thrown.set(e);
+            }
+        });
+
+        long deadline = System.currentTimeMillis() + 15000;
+        while (server.getAllServeEvents().isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100);
+        }
+        task.kill();
+        // Simulate the worker, which interrupts the run thread after kill() returns.
+        thread.interrupt();
+        thread.join(15000);
+
+        assertThat(thread.isAlive(), is(false));
+        assertThat(thrown.get() instanceof io.kestra.core.exceptions.KilledException, is(true));
+    }
+
     private Evaluate.Output runDefaultTask(RunContext runContext) throws Exception {
         Map<String, Object> billing = Map.of("billing", "Payments, invoicing, refunds");
         Map<String, Object> options = new LinkedHashMap<>(billing);
