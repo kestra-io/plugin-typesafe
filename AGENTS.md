@@ -3,13 +3,13 @@
 ## What
 
 - Provides plugin components under `io.kestra.plugin.typesafe`.
-- Includes classes such as `Example`, `Trigger`.
+- Includes classes such as `Evaluate`, `EvaluateBatch`, `Question`, `Answer`.
 
 ## Why
 
-- What user problem does this solve? Teams need a concrete starting point for building and validating new Kestra plugins without recreating the same project scaffolding from scratch.
-- Why would a team adopt this plugin in a workflow? It gives plugin authors a ready-made reference repo they can adapt alongside their own build, test, and publishing workflow.
-- What operational/business outcome does it enable? It shortens plugin delivery time, reduces setup mistakes, and makes internal or partner plugin development more repeatable.
+- What user problem does this solve? Teams need to evaluate content against calibrated, typed TypeSafe questions from orchestrated workflows instead of one-off scripts or manual review.
+- Why would a team adopt this plugin in a workflow? It keeps TypeSafe evaluation steps in the same Kestra flow as data preparation, retries, notifications, and downstream systems.
+- What operational/business outcome does it enable? It reduces manual triage and fragmented tooling while improving reliability and traceability for processes that depend on consistent automated judgment.
 
 ## How
 
@@ -25,7 +25,8 @@ Infrastructure dependencies (Docker Compose services):
 
 ### Key Plugin Classes
 
-- `io.kestra.plugin.typesafe.Example`
+- `io.kestra.plugin.typesafe.Evaluate`
+- `io.kestra.plugin.typesafe.EvaluateBatch`
 
 ### Project Structure
 

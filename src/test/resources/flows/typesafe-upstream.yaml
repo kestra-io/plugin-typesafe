@@ -1,0 +1,21 @@
+id: typesafe-upstream
+namespace: io.kestra.tests
+
+inputs:
+  - id: baseUrl
+    type: STRING
+
+tasks:
+  - id: producer
+    type: io.kestra.plugin.core.output.OutputValues
+    values:
+      is_urgent:
+        type: noul
+        instructions: Does this convey urgency?
+  - id: evaluate
+    type: io.kestra.plugin.typesafe.Evaluate
+    apiKey: test-key
+    baseUrl: "{{ inputs.baseUrl }}"
+    model: jev-latest
+    state: Help! My payouts have been failing for 3 days.
+    questions: "{{ outputs.producer.values }}"

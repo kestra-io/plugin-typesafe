@@ -1,0 +1,21 @@
+id: typesafe-batch
+namespace: io.kestra.tests
+
+inputs:
+  - id: baseUrl
+    type: STRING
+
+tasks:
+  - id: batch
+    type: io.kestra.plugin.typesafe.EvaluateBatch
+    apiKey: test-key
+    baseUrl: "{{ inputs.baseUrl }}"
+    model: jev-latest
+    from:
+      - first
+      - second
+    concurrency: 2
+    questions:
+      is_urgent:
+        type: NOUL
+        instructions: Does this convey urgency?

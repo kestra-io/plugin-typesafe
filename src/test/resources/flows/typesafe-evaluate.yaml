@@ -1,0 +1,18 @@
+id: typesafe-evaluate
+namespace: io.kestra.tests
+
+inputs:
+  - id: baseUrl
+    type: STRING
+
+tasks:
+  - id: evaluate
+    type: io.kestra.plugin.typesafe.Evaluate
+    apiKey: test-key
+    baseUrl: "{{ inputs.baseUrl }}"
+    model: jev-latest
+    state: Help! My payouts have been failing for 3 days.
+    questions:
+      is_urgent:
+        type: NOUL
+        instructions: Does this convey urgency?
