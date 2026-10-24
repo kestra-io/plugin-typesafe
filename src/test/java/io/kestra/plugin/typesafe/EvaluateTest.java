@@ -142,6 +142,28 @@ class EvaluateTest {
     }
 
     @Test
+    void withoutAuthorizationHeader() throws Exception {
+        server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY)));
+
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        Evaluate task = Evaluate.builder()
+            .id("evaluate")
+            .type(Evaluate.class.getName())
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        task.run(runContextFactory.of());
+
+        server.verify(postRequestedFor(urlEqualTo("/v1/systemone"))
+            .withoutHeader("Authorization"));
+    }
+
+    @Test
     void unauthorized() {
         server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(401).withBody("{\"detail\": \"Invalid API key\"}")));
 
@@ -697,7 +719,9 @@ class EvaluateTest {
     }
 
     @Test
-    void emptyApiKeyIsRejectedWithGuidance() {
+    void emptyApiKeyIsTreatedAsAbsent() throws Exception {
+        server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY)));
+
         Map<String, Question> questions = Map.of(
             "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
         );
@@ -711,11 +735,10 @@ class EvaluateTest {
             .questions(Property.ofValue(questions))
             .build();
 
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> task.run(runContextFactory.of()));
+        task.run(runContextFactory.of());
 
-        assertThat(e.getMessage(), containsString("'apiKey'"));
-        assertThat(e.getMessage(), containsString("secret('TYPESAFE_API_KEY')"));
-        server.verify(0, postRequestedFor(urlEqualTo("/v1/systemone")));
+        server.verify(postRequestedFor(urlEqualTo("/v1/systemone"))
+            .withoutHeader("Authorization"));
     }
 
     @Test

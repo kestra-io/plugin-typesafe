@@ -4,7 +4,11 @@ Evaluate content with TypeSafe AI's System One models from Kestra flows.
 
 ## Authentication
 
-Set `apiKey` (required) to your TypeSafe API key. It is sent as an `Authorization: Bearer` header. Store secrets in [secrets](https://kestra.io/docs/concepts/secrets) and apply connection properties globally with plugin defaults:
+The `apiKey` property is optional. When configured, the plugin sends it as a Bearer token in the `Authorization` header. When omitted or left blank, the header is not sent.
+
+This allows the plugin to work with compatible endpoints that do not require authentication, including local TypeSafe-compatible servers such as Laya. Whether authentication can be omitted depends on the server configuration.
+
+For authenticated endpoints, store your API key as a [Kestra secret](https://kestra.io/docs/concepts/secrets) rather than hardcoding it in a flow. You can configure connection properties globally using plugin defaults:
 
 ```yaml
 pluginDefaults:
@@ -14,6 +18,26 @@ pluginDefaults:
       apiKey: "{{ secret('TYPESAFE_API_KEY') }}"
       model: jev-latest
 ```
+
+For a local, unauthenticated endpoint, configure `baseUrl` and omit `apiKey`:
+
+```yaml
+id: evaluate
+namespace: company.team
+
+tasks:
+  - id: evaluate
+    type: io.kestra.plugin.typesafe.Evaluate
+    baseUrl: http://localhost:8000
+    model: jev-latest
+    state: "A customer reports a failed payment."
+    questions:
+      is_urgent:
+        type: NOUL
+        instructions: "Does this require urgent attention?"
+```
+
+The `baseUrl` must be reachable from the Kestra execution environment. For example, `localhost` refers to the Kestra container itself when Kestra runs inside Docker, not necessarily the host machine.
 
 ## Model pinning
 

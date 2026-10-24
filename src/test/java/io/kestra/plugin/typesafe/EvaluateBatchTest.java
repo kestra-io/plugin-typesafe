@@ -415,6 +415,29 @@ class EvaluateBatchTest {
     }
 
     @Test
+    void withoutAuthorizationHeader() throws Exception {
+        server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY)));
+
+        Map<String, Question> questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        EvaluateBatch task = EvaluateBatch.builder()
+            .id("batch")
+            .type(EvaluateBatch.class.getName())
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .from(List.of("a"))
+            .concurrency(Property.ofValue(1))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        task.run(runContextFactory.of());
+
+        server.verify(postRequestedFor(urlEqualTo("/v1/systemone"))
+            .withoutHeader("Authorization"));
+    }
+
+    @Test
     void nullFromIsRejected() {
         EvaluateBatch task = batchTask(null, 1);
 
