@@ -79,9 +79,8 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "TypeSafe API key",
-        description = "Bearer token sent in the `Authorization` header; store it as a secret."
+        description = "Optional Bearer token sent in the `Authorization` header when provided; store it as a secret."
     )
-    @NotNull
     @PluginProperty(group = "connection", secret = true)
     @ToString.Exclude
     protected Property<String> apiKey;
@@ -222,11 +221,15 @@ public abstract class AbstractTypeSafe extends Task {
         questions.forEach((id, question) -> apiQuestions.put(id, question.toApiMap()));
         body.put("questions", apiQuestions);
 
-        HttpRequest request = HttpRequest.builder()
+        var requestBuilder = HttpRequest.builder()
             .uri(URI.create(normalizeBaseUrl(baseUrl) + "/v1/systemone"))
-            .method("POST")
-            .addHeader("Authorization", "Bearer " + apiKey)
-            .addHeader("Content-Type", "application/json")
+            .method("POST");
+
+        if (apiKey != null && !apiKey.isBlank()) {
+            requestBuilder.addHeader("Authorization", "Bearer " + apiKey);
+        }
+
+        HttpRequest request = requestBuilder.addHeader("Content-Type", "application/json")
             .body(
                 HttpRequest.StringRequestBody.builder()
                     .contentType("application/json")
@@ -573,7 +576,7 @@ public abstract class AbstractTypeSafe extends Task {
         }
         // Use the case-insensitive map view for robust header lookup
         Map<String, List<String>> headerMap = headers.map();
-        
+
         // Try retry-after-ms first (milliseconds) - check multiple common casings
         List<String> retryAfterMsValues = headerMap.get("retry-after-ms");
         if (retryAfterMsValues == null || retryAfterMsValues.isEmpty()) {
@@ -682,10 +685,10 @@ public abstract class AbstractTypeSafe extends Task {
      */
     protected RenderedShared renderShared(RunContext runContext) throws IllegalVariableEvaluationException {
         String rApiKey = this.apiKey == null
-            ? orThrowApiKeyEmpty()
+            ? null
             : runContext.render(this.apiKey).as(String.class)
                 .filter(value -> !value.isBlank())
-                .orElseGet(AbstractTypeSafe::orThrowApiKeyEmpty);
+                .orElse(null);
         String rBaseUrl = this.baseUrl == null
             ? DEFAULT_BASE_URL
             : runContext.render(this.baseUrl).as(String.class)
@@ -706,12 +709,6 @@ public abstract class AbstractTypeSafe extends Task {
         return new RenderedShared(rApiKey, rBaseUrl, rModel, rQuestions);
     }
 
-    private static String orThrowApiKeyEmpty() {
-        throw new IllegalArgumentException(
-            "Invalid 'apiKey': the TypeSafe API key is missing or empty. Fix: set 'apiKey' to your Bearer token, "
-                + "e.g. \"{{ secret('TYPESAFE_API_KEY') }}\"."
-        );
-    }
 
     protected record RenderedShared(String apiKey, String baseUrl, String model, Map<String, Question> questions) {
     }
