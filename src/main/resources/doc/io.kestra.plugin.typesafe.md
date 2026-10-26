@@ -29,7 +29,7 @@ tasks:
   - id: evaluate
     type: io.kestra.plugin.typesafe.Evaluate
     baseUrl: http://localhost:8000
-    model: jev-latest
+    model: <model served by your endpoint>
     state: "A customer reports a failed payment."
     questions:
       is_urgent:

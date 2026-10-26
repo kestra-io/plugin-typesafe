@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.kestra.core.utils.IdUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -145,11 +146,11 @@ class EvaluateTest {
     void withoutAuthorizationHeader() throws Exception {
         server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY)));
 
-        Map<String, Question> questions = Map.of(
+        var questions = Map.of(
             "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
         );
-        Evaluate task = Evaluate.builder()
-            .id("evaluate")
+        var task = Evaluate.builder()
+            .id(IdUtils.create())
             .type(Evaluate.class.getName())
             .baseUrl(Property.ofValue(server.baseUrl()))
             .model(Property.ofValue("jev-latest"))
@@ -161,6 +162,28 @@ class EvaluateTest {
 
         server.verify(postRequestedFor(urlEqualTo("/v1/systemone"))
             .withoutHeader("Authorization"));
+    }
+
+    @Test
+    void hostedEndpointRequiresApiKey() {
+        var questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        var task = Evaluate.builder()
+            .id(IdUtils.create())
+            .type(Evaluate.class.getName())
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> task.run(runContextFactory.of())
+        );
+
+        assertThat(e.getMessage(), containsString("apiKey"));
+        assertThat(e.getMessage(), containsString("hosted API"));
     }
 
     @Test

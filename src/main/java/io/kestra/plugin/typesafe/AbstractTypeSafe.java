@@ -79,7 +79,9 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "TypeSafe API key",
-        description = "Optional Bearer token sent in the `Authorization` header when provided; store it as a secret."
+        description = """
+            Optional Bearer token sent in the `Authorization` header when provided; store it as a secret.
+            """
     )
     @PluginProperty(group = "connection", secret = true)
     @ToString.Exclude
@@ -87,7 +89,9 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "TypeSafe base URL",
-        description = "Base URL of the TypeSafe API. Override it to target a mock server in tests."
+        description = """
+            Base URL of the TypeSafe API. Override it to target a mock server in tests.
+            """
     )
     @PluginProperty(group = "connection")
     @lombok.Builder.Default
@@ -95,7 +99,9 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "Model",
-        description = "The model that handles the request, e.g. `jev-latest`. The response reports the versioned model id that answered."
+        description = """
+            The model that handles the request, e.g. `jev-latest`. The response reports the versioned model id that answered.
+            """
     )
     @PluginProperty(group = "main")
     @lombok.Builder.Default
@@ -103,7 +109,9 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "Questions",
-        description = "A map of typed questions, keyed by an id you choose; answers come back under the same ids."
+        description = """
+            A map of typed questions, keyed by an id you choose; answers come back under the same ids.
+            """
     )
     @NotNull
     @PluginProperty(
@@ -229,7 +237,7 @@ public abstract class AbstractTypeSafe extends Task {
             requestBuilder.addHeader("Authorization", "Bearer " + apiKey);
         }
 
-        HttpRequest request = requestBuilder.addHeader("Content-Type", "application/json")
+        var request = requestBuilder.addHeader("Content-Type", "application/json")
             .body(
                 HttpRequest.StringRequestBody.builder()
                     .contentType("application/json")
@@ -679,9 +687,11 @@ public abstract class AbstractTypeSafe extends Task {
      * Renders the shared properties. The {@code questions} map entries are rendered with their
      * nested {@link Question} fields.
      *
-     * <p>Optional properties ({@code baseUrl}, {@code model}) fall back to their defaults when
-     * omitted; a descriptive {@link IllegalArgumentException} is thrown only when a required
-     * value is missing or an explicitly provided value renders to empty.
+     * <p>The {@code apiKey} may be omitted for custom endpoints that support unauthenticated requests;
+     * the default hosted endpoint requires an API key. Optional properties ({@code baseUrl}, {@code model})
+     * fall back to their defaults when omitted. A descriptive {@link IllegalArgumentException} is thrown
+     * when a required value is missing or an explicitly provided value renders to blank. Blank rendered
+     * API keys are treated as absent.
      */
     protected RenderedShared renderShared(RunContext runContext) throws IllegalVariableEvaluationException {
         String rApiKey = this.apiKey == null
@@ -697,6 +707,15 @@ public abstract class AbstractTypeSafe extends Task {
                     "Invalid 'baseUrl': the TypeSafe base URL is empty. Fix: set 'baseUrl' to the API base URL "
                         + "(e.g. \"https://api.typesafe.ai\") or remove it to use the default \"" + DEFAULT_BASE_URL + "\"."
                 ));
+
+        if ((rApiKey == null || rApiKey.isBlank()) && DEFAULT_BASE_URL.equals(rBaseUrl)) {
+            throw new IllegalArgumentException(
+                "Invalid 'apiKey': the hosted API at \"" + DEFAULT_BASE_URL + "\" requires an API key. "
+                    + "Fix: set 'apiKey' (e.g. \"{{ secret('TYPESAFE_API_KEY') }}\"), "
+                    + "or set a custom 'baseUrl' for unauthenticated local endpoints."
+            );
+        }
+
         String rModel = this.model == null
             ? DEFAULT_MODEL
             : runContext.render(this.model).as(String.class)
