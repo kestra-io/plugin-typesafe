@@ -177,7 +177,30 @@ class EvaluateTest {
             .questions(Property.ofValue(questions))
             .build();
 
-        IllegalArgumentException e = assertThrows(
+        var e = assertThrows(
+            IllegalArgumentException.class,
+            () -> task.run(runContextFactory.of())
+        );
+
+        assertThat(e.getMessage(), containsString("apiKey"));
+        assertThat(e.getMessage(), containsString("hosted API"));
+    }
+
+    @Test
+    void hostedEndpointWithTrailingSlashRequiresApiKey() {
+        var questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        var task = Evaluate.builder()
+            .id(IdUtils.create())
+            .type(Evaluate.class.getName())
+            .baseUrl(Property.ofValue("https://api.typesafe.ai/"))
+            .model(Property.ofValue("jev-latest"))
+            .state(Property.ofValue("hello"))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        var e = assertThrows(
             IllegalArgumentException.class,
             () -> task.run(runContextFactory.of())
         );

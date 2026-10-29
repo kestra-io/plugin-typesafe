@@ -80,7 +80,7 @@ public abstract class AbstractTypeSafe extends Task {
     @Schema(
         title = "TypeSafe API key",
         description = """
-            Optional Bearer token sent in the `Authorization` header when provided; store it as a secret.
+            Bearer token sent in the `Authorization` header. Required for the default hosted endpoint; optional for compatible endpoints that accept unauthenticated requests. Store it as a secret.
             """
     )
     @PluginProperty(group = "connection", secret = true)
@@ -90,7 +90,7 @@ public abstract class AbstractTypeSafe extends Task {
     @Schema(
         title = "TypeSafe base URL",
         description = """
-            Base URL of the TypeSafe API. Override it to target a mock server in tests.
+            Base URL of the TypeSafe API, or of a TypeSafe-compatible server. Defaults to `https://api.typesafe.ai`.
             """
     )
     @PluginProperty(group = "connection")
@@ -708,7 +708,7 @@ public abstract class AbstractTypeSafe extends Task {
                         + "(e.g. \"https://api.typesafe.ai\") or remove it to use the default \"" + DEFAULT_BASE_URL + "\"."
                 ));
 
-        if ((rApiKey == null || rApiKey.isBlank()) && DEFAULT_BASE_URL.equals(rBaseUrl)) {
+        if (rApiKey == null && DEFAULT_BASE_URL.equalsIgnoreCase(normalizeBaseUrl(rBaseUrl))) {
             throw new IllegalArgumentException(
                 "Invalid 'apiKey': the hosted API at \"" + DEFAULT_BASE_URL + "\" requires an API key. "
                     + "Fix: set 'apiKey' (e.g. \"{{ secret('TYPESAFE_API_KEY') }}\"), "

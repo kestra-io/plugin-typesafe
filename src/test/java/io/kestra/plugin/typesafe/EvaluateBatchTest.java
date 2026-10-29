@@ -452,7 +452,7 @@ class EvaluateBatchTest {
             .questions(Property.ofValue(questions))
             .build();
 
-        IllegalArgumentException e = assertThrows(
+        var e = assertThrows(
             IllegalArgumentException.class,
             () -> task.run(runContextFactory.of())
         );
