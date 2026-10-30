@@ -22,6 +22,7 @@ import io.kestra.core.models.executions.metrics.Counter;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.serializers.JacksonMapper;
 
@@ -412,6 +413,52 @@ class EvaluateBatchTest {
 
         server.verify(postRequestedFor(urlEqualTo("/v1/systemone"))
             .withHeader("Authorization", equalTo("Bearer test-key")));
+    }
+
+    @Test
+    void withoutAuthorizationHeader() throws Exception {
+        server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200).withBody(SUCCESS_BODY)));
+
+        var questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        var task = EvaluateBatch.builder()
+            .id(IdUtils.create())
+            .type(EvaluateBatch.class.getName())
+            .baseUrl(Property.ofValue(server.baseUrl()))
+            .model(Property.ofValue("jev-latest"))
+            .from(List.of("a"))
+            .concurrency(Property.ofValue(1))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        task.run(runContextFactory.of());
+
+        server.verify(postRequestedFor(urlEqualTo("/v1/systemone"))
+            .withoutHeader("Authorization"));
+    }
+
+    @Test
+    void hostedEndpointRequiresApiKey() {
+        var questions = Map.of(
+            "is_urgent", Question.builder().type(QuestionType.NOUL).instructions("Is this urgent?").build()
+        );
+        var task = EvaluateBatch.builder()
+            .id(IdUtils.create())
+            .type(EvaluateBatch.class.getName())
+            .model(Property.ofValue("jev-latest"))
+            .from(List.of("a"))
+            .concurrency(Property.ofValue(1))
+            .questions(Property.ofValue(questions))
+            .build();
+
+        var e = assertThrows(
+            IllegalArgumentException.class,
+            () -> task.run(runContextFactory.of())
+        );
+
+        assertThat(e.getMessage(), containsString("apiKey"));
+        assertThat(e.getMessage(), containsString("hosted API"));
     }
 
     @Test

@@ -79,16 +79,19 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "TypeSafe API key",
-        description = "Bearer token sent in the `Authorization` header; store it as a secret."
+        description = """
+            Bearer token sent in the `Authorization` header. Required for the default hosted endpoint; optional for compatible endpoints that accept unauthenticated requests. Store it as a secret.
+            """
     )
-    @NotNull
     @PluginProperty(group = "connection", secret = true)
     @ToString.Exclude
     protected Property<String> apiKey;
 
     @Schema(
         title = "TypeSafe base URL",
-        description = "Base URL of the TypeSafe API. Override it to target a mock server in tests."
+        description = """
+            Base URL of the TypeSafe API, or of a TypeSafe-compatible server. Defaults to `https://api.typesafe.ai`.
+            """
     )
     @PluginProperty(group = "connection")
     @lombok.Builder.Default
@@ -96,7 +99,9 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "Model",
-        description = "The model that handles the request, e.g. `jev-latest`. The response reports the versioned model id that answered."
+        description = """
+            The model that handles the request, e.g. `jev-latest`. The response reports the versioned model id that answered.
+            """
     )
     @PluginProperty(group = "main")
     @lombok.Builder.Default
@@ -104,7 +109,9 @@ public abstract class AbstractTypeSafe extends Task {
 
     @Schema(
         title = "Questions",
-        description = "A map of typed questions, keyed by an id you choose; answers come back under the same ids."
+        description = """
+            A map of typed questions, keyed by an id you choose; answers come back under the same ids.
+            """
     )
     @NotNull
     @PluginProperty(
@@ -222,11 +229,15 @@ public abstract class AbstractTypeSafe extends Task {
         questions.forEach((id, question) -> apiQuestions.put(id, question.toApiMap()));
         body.put("questions", apiQuestions);
 
-        HttpRequest request = HttpRequest.builder()
+        var requestBuilder = HttpRequest.builder()
             .uri(URI.create(normalizeBaseUrl(baseUrl) + "/v1/systemone"))
-            .method("POST")
-            .addHeader("Authorization", "Bearer " + apiKey)
-            .addHeader("Content-Type", "application/json")
+            .method("POST");
+
+        if (apiKey != null && !apiKey.isBlank()) {
+            requestBuilder.addHeader("Authorization", "Bearer " + apiKey);
+        }
+
+        var request = requestBuilder.addHeader("Content-Type", "application/json")
             .body(
                 HttpRequest.StringRequestBody.builder()
                     .contentType("application/json")
@@ -573,7 +584,7 @@ public abstract class AbstractTypeSafe extends Task {
         }
         // Use the case-insensitive map view for robust header lookup
         Map<String, List<String>> headerMap = headers.map();
-        
+
         // Try retry-after-ms first (milliseconds) - check multiple common casings
         List<String> retryAfterMsValues = headerMap.get("retry-after-ms");
         if (retryAfterMsValues == null || retryAfterMsValues.isEmpty()) {
@@ -676,16 +687,18 @@ public abstract class AbstractTypeSafe extends Task {
      * Renders the shared properties. The {@code questions} map entries are rendered with their
      * nested {@link Question} fields.
      *
-     * <p>Optional properties ({@code baseUrl}, {@code model}) fall back to their defaults when
-     * omitted; a descriptive {@link IllegalArgumentException} is thrown only when a required
-     * value is missing or an explicitly provided value renders to empty.
+     * <p>The {@code apiKey} may be omitted for custom endpoints that support unauthenticated requests;
+     * the default hosted endpoint requires an API key. Optional properties ({@code baseUrl}, {@code model})
+     * fall back to their defaults when omitted. A descriptive {@link IllegalArgumentException} is thrown
+     * when a required value is missing or an explicitly provided value renders to blank. Blank rendered
+     * API keys are treated as absent.
      */
     protected RenderedShared renderShared(RunContext runContext) throws IllegalVariableEvaluationException {
         String rApiKey = this.apiKey == null
-            ? orThrowApiKeyEmpty()
+            ? null
             : runContext.render(this.apiKey).as(String.class)
                 .filter(value -> !value.isBlank())
-                .orElseGet(AbstractTypeSafe::orThrowApiKeyEmpty);
+                .orElse(null);
         String rBaseUrl = this.baseUrl == null
             ? DEFAULT_BASE_URL
             : runContext.render(this.baseUrl).as(String.class)
@@ -694,6 +707,15 @@ public abstract class AbstractTypeSafe extends Task {
                     "Invalid 'baseUrl': the TypeSafe base URL is empty. Fix: set 'baseUrl' to the API base URL "
                         + "(e.g. \"https://api.typesafe.ai\") or remove it to use the default \"" + DEFAULT_BASE_URL + "\"."
                 ));
+
+        if (rApiKey == null && DEFAULT_BASE_URL.equalsIgnoreCase(normalizeBaseUrl(rBaseUrl))) {
+            throw new IllegalArgumentException(
+                "Invalid 'apiKey': the hosted API at \"" + DEFAULT_BASE_URL + "\" requires an API key. "
+                    + "Fix: set 'apiKey' (e.g. \"{{ secret('TYPESAFE_API_KEY') }}\"), "
+                    + "or set a custom 'baseUrl' for unauthenticated local endpoints."
+            );
+        }
+
         String rModel = this.model == null
             ? DEFAULT_MODEL
             : runContext.render(this.model).as(String.class)
@@ -704,13 +726,6 @@ public abstract class AbstractTypeSafe extends Task {
                 ));
         Map<String, Question> rQuestions = runContext.render(this.questions).asMap(String.class, Question.class);
         return new RenderedShared(rApiKey, rBaseUrl, rModel, rQuestions);
-    }
-
-    private static String orThrowApiKeyEmpty() {
-        throw new IllegalArgumentException(
-            "Invalid 'apiKey': the TypeSafe API key is missing or empty. Fix: set 'apiKey' to your Bearer token, "
-                + "e.g. \"{{ secret('TYPESAFE_API_KEY') }}\"."
-        );
     }
 
     protected record RenderedShared(String apiKey, String baseUrl, String model, Map<String, Question> questions) {
