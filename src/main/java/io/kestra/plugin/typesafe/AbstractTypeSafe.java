@@ -728,7 +728,6 @@ public abstract class AbstractTypeSafe extends Task {
         return new RenderedShared(rApiKey, rBaseUrl, rModel, rQuestions);
     }
 
-
     protected record RenderedShared(String apiKey, String baseUrl, String model, Map<String, Question> questions) {
     }
 }

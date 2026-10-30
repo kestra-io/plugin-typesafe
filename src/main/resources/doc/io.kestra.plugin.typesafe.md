@@ -4,7 +4,7 @@ Evaluate content with TypeSafe AI's System One models from Kestra flows.
 
 ## Authentication
 
-The `apiKey` property is optional. When configured, the plugin sends it as a Bearer token in the `Authorization` header. When omitted or left blank, the header is not sent.
+`apiKey` is required for the default hosted endpoint (`https://api.typesafe.ai`). It is optional only when `baseUrl` points to a compatible endpoint that accepts unauthenticated requests; the `Authorization` header is then not sent.
 
 This allows the plugin to work with compatible endpoints that do not require authentication, including local TypeSafe-compatible servers such as Laya. Whether authentication can be omitted depends on the server configuration.
 
