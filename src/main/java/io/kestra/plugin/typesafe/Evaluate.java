@@ -77,6 +77,25 @@ import lombok.experimental.SuperBuilder;
                           - Frustrated
                           - Very angry
                 """
+        ),
+        @Example(
+            title = "Evaluate with a self-hosted Jev-compatible server (Ollama)",
+            full = true,
+            code = """
+                id: typesafe_evaluate_ollama
+                namespace: company.team
+
+                tasks:
+                  - id: evaluate
+                    type: io.kestra.plugin.typesafe.Evaluate
+                    baseUrl: http://localhost:11434
+                    model: jev-latest
+                    state: Help! My payouts have been failing for 3 days.
+                    questions:
+                      is_urgent:
+                        type: NOUL
+                        instructions: Does this convey urgency?
+                """
         )
     },
     metrics = {
