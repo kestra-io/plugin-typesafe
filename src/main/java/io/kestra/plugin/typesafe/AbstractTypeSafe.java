@@ -80,7 +80,7 @@ public abstract class AbstractTypeSafe extends Task {
     @Schema(
         title = "TypeSafe API key",
         description = """
-            Bearer token sent in the `Authorization` header. Required for the default hosted endpoint; optional for compatible endpoints that accept unauthenticated requests. Store it as a secret.
+            Bearer token sent in the `Authorization` header. Required for the default hosted endpoint; optional for compatible endpoints that accept unauthenticated requests (for example Ollama). Optional since plugin 1.1.2: earlier versions reject a missing value with `apiKey: must not be null`. Store it as a secret.
             """
     )
     @PluginProperty(group = "connection", secret = true)
