@@ -112,7 +112,7 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
             name = "output.tokens",
             type = Counter.TYPE,
             unit = "tokens",
-            description = "Total number of output tokens reported by the TypeSafe API across all records."
+            description = "Total number of output tokens reported by the TypeSafe API across all records. Not emitted when the endpoint reports 0; Ollama does not report output tokens for decision models."
         )
     }
 )

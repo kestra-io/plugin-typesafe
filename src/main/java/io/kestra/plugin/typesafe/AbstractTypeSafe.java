@@ -508,8 +508,14 @@ public abstract class AbstractTypeSafe extends Task {
         if (usage == null) {
             return;
         }
-        runContext.metric(Counter.of("input.tokens", usage.getInputTokens()));
-        runContext.metric(Counter.of("output.tokens", usage.getOutputTokens()));
+        // Some compatible servers (e.g. Ollama) report 0 for a count they don't track;
+        // emitting it would look like a real measurement, so only positive counts are recorded.
+        if (usage.getInputTokens() > 0) {
+            runContext.metric(Counter.of("input.tokens", usage.getInputTokens()));
+        }
+        if (usage.getOutputTokens() > 0) {
+            runContext.metric(Counter.of("output.tokens", usage.getOutputTokens()));
+        }
     }
 
     /**

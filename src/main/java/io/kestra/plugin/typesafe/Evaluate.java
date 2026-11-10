@@ -109,7 +109,7 @@ import lombok.experimental.SuperBuilder;
             name = "output.tokens",
             type = Counter.TYPE,
             unit = "tokens",
-            description = "Number of output tokens reported by the TypeSafe API for the request."
+            description = "Number of output tokens reported by the TypeSafe API for the request. Not emitted when the endpoint reports 0; Ollama does not report output tokens for decision models."
         )
     }
 )
