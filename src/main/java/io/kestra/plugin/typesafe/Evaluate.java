@@ -89,6 +89,7 @@ import lombok.experimental.SuperBuilder;
                   - id: evaluate
                     type: io.kestra.plugin.typesafe.Evaluate
                     baseUrl: http://localhost:11434
+                    # no apiKey needed for Ollama (plugin 1.1.2+; earlier versions require one)
                     model: jev-latest
                     state: Help! My payouts have been failing for 3 days.
                     questions:
