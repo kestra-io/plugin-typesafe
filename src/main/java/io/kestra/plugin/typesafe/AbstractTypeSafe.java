@@ -504,12 +504,14 @@ public abstract class AbstractTypeSafe extends Task {
             )
         );
 
-    protected void emitUsageMetrics(RunContext runContext, TypeSafeResponse.Usage usage) {
-        if (usage == null) {
-            return;
+    protected void emitUsageMetrics(RunContext runContext, long inputTokens, long outputTokens) {
+        // Some servers (e.g. Ollama) report 0 for counts they don't track.
+        if (inputTokens > 0) {
+            runContext.metric(Counter.of("input.tokens", inputTokens));
         }
-        runContext.metric(Counter.of("input.tokens", usage.getInputTokens()));
-        runContext.metric(Counter.of("output.tokens", usage.getOutputTokens()));
+        if (outputTokens > 0) {
+            runContext.metric(Counter.of("output.tokens", outputTokens));
+        }
     }
 
     /**

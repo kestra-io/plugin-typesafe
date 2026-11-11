@@ -39,6 +39,10 @@ tasks:
 
 The `baseUrl` must be reachable from the Kestra execution environment. For example, `localhost` refers to the Kestra container itself when Kestra runs inside Docker, not necessarily the host machine.
 
+## Token metrics
+
+`Evaluate` and `EvaluateBatch` emit `input.tokens` and `output.tokens` from the `usage` the endpoint returns. A count the endpoint reports as 0 is not emitted, because some compatible servers report 0 for counts they do not track: Ollama, for example, reports `output_tokens: 0` for decision models.
+
 ## Model pinning
 
 `model` accepts an alias such as `jev-latest`, which moves when TypeSafe ships a new release. Every response echoes the versioned model id that actually answered (for example `jev-1.13.0`), also exposed as the task `model` output. If you tune thresholds against a specific version, pin that versioned id in `model` instead of the alias.

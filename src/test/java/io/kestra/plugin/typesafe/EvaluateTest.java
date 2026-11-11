@@ -519,6 +519,18 @@ class EvaluateTest {
     }
 
     @Test
+    void zeroOutputTokensAreNotEmittedAsAMetric() throws Exception {
+        server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200)
+            .withBody(SUCCESS_BODY.replace("\"output_tokens\": 20", "\"output_tokens\": 0"))));
+
+        RunContext runContext = runContextFactory.of();
+        runDefaultTask(runContext);
+
+        assertThat(metricValue(runContext, "input.tokens"), is(296.0));
+        assertThat(runContext.metrics().stream().anyMatch(m -> m.getName().equals("output.tokens")), is(false));
+    }
+
+    @Test
     void validationErrorsFailBeforeHttp() {
         Map<String, Question> questions = Map.of(
             "department", Question.builder().type(QuestionType.CHOICE).instructions("Pick one.").build()

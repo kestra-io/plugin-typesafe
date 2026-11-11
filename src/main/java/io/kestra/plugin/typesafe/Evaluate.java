@@ -104,13 +104,13 @@ import lombok.experimental.SuperBuilder;
             name = "input.tokens",
             type = Counter.TYPE,
             unit = "tokens",
-            description = "Number of input tokens reported by the TypeSafe API for the request."
+            description = "Number of input tokens reported by the TypeSafe API for the request. Not emitted when the endpoint reports 0."
         ),
         @Metric(
             name = "output.tokens",
             type = Counter.TYPE,
             unit = "tokens",
-            description = "Number of output tokens reported by the TypeSafe API for the request."
+            description = "Number of output tokens reported by the TypeSafe API for the request. Not emitted when the endpoint reports 0."
         )
     }
 )
@@ -144,7 +144,10 @@ public class Evaluate extends AbstractTypeSafe implements RunnableTask<Evaluate.
                 shared.baseUrl(), shared.apiKey(), shared.model(),
                 rState, shared.questions()
             );
-            emitUsageMetrics(runContext, response.getUsage());
+            TypeSafeResponse.Usage usage = response.getUsage();
+            if (usage != null) {
+                emitUsageMetrics(runContext, usage.getInputTokens(), usage.getOutputTokens());
+            }
             return Output.builder()
                 .answers(response.getAnswers())
                 .model(response.getModel())
