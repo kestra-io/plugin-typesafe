@@ -520,7 +520,6 @@ class EvaluateTest {
 
     @Test
     void zeroOutputTokensAreNotEmittedAsAMetric() throws Exception {
-        // Ollama reports "output_tokens": 0 for decision models; a 0 would look like a real measurement.
         server.stubFor(post(urlEqualTo("/v1/systemone")).willReturn(aResponse().withStatus(200)
             .withBody(SUCCESS_BODY.replace("\"output_tokens\": 20", "\"output_tokens\": 0"))));
 

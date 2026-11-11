@@ -106,13 +106,13 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
             name = "input.tokens",
             type = Counter.TYPE,
             unit = "tokens",
-            description = "Total number of input tokens reported by the TypeSafe API across all records."
+            description = "Total number of input tokens reported by the TypeSafe API across all records. Not emitted when the endpoint reports 0."
         ),
         @Metric(
             name = "output.tokens",
             type = Counter.TYPE,
             unit = "tokens",
-            description = "Total number of output tokens reported by the TypeSafe API across all records. Not emitted when the endpoint reports 0; Ollama does not report output tokens for decision models."
+            description = "Total number of output tokens reported by the TypeSafe API across all records. Not emitted when the endpoint reports 0."
         )
     }
 )
@@ -264,8 +264,7 @@ public class EvaluateBatch extends AbstractTypeSafe implements RunnableTask<Eval
 
         URI uri = runContext.storage().putFile(tempFile);
         runContext.metric(Counter.of("records", count));
-        runContext.metric(Counter.of("input.tokens", inputTokens));
-        runContext.metric(Counter.of("output.tokens", outputTokens));
+        emitUsageMetrics(runContext, inputTokens, outputTokens);
         return Output.builder()
             .uri(uri)
             .count(count)
