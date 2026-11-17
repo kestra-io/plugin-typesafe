@@ -1,6 +1,6 @@
 @PluginSubGroup(
     title = "TypeSafe",
-    description = "Evaluate content with TypeSafe AI's System One models.",
+    description = "Evaluate content with Jev, the decision model from TypeSafe AI.",
     categories = {
         PluginSubGroup.PluginCategory.AI,
         PluginSubGroup.PluginCategory.DATA

@@ -25,8 +25,8 @@ import lombok.experimental.SuperBuilder;
 @Getter
 @NoArgsConstructor
 @Schema(
-    title = "Evaluate content with TypeSafe",
-    description = "Evaluates a state against a map of typed questions via the TypeSafe System One API and returns one structured answer per question."
+    title = "Evaluate content with Jev",
+    description = "Evaluates a state against a map of typed questions with Jev, through the TypeSafe System One API, and returns one structured answer per question."
 )
 @Plugin(
     examples = {

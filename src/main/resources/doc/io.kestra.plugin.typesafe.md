@@ -1,6 +1,6 @@
 # How to use the TypeSafe plugin
 
-Evaluate content with TypeSafe AI's System One models from Kestra flows.
+Evaluate content from Kestra flows with Jev, the decision model from TypeSafe AI. Jev answers typed questions, such as "which of these departments?", with one of the options you allow and a confidence score, instead of free text you have to parse.
 
 ## Authentication
 
@@ -8,16 +8,25 @@ Evaluate content with TypeSafe AI's System One models from Kestra flows.
 
 This allows the plugin to work with compatible endpoints that do not require authentication, including local TypeSafe-compatible servers such as Laya. Whether authentication can be omitted depends on the server configuration.
 
-For authenticated endpoints, store your API key as a [Kestra secret](https://kestra.io/docs/concepts/secrets) rather than hardcoding it in a flow. You can configure connection properties globally using plugin defaults:
+For authenticated endpoints, store your API key as a [Kestra secret](https://kestra.io/docs/concepts/secrets) rather than hardcoding it in a flow, and read it on the task:
 
 ```yaml
-pluginDefaults:
-  - forced: false
+id: evaluate
+namespace: company.team
+
+tasks:
+  - id: evaluate
     type: io.kestra.plugin.typesafe.Evaluate
-    values:
-      apiKey: "{{ secret('TYPESAFE_API_KEY') }}"
-      model: jev-latest
+    apiKey: "{{ secret('TYPESAFE_API_KEY') }}"
+    model: jev-latest
+    state: "A customer reports a failed payment."
+    questions:
+      is_urgent:
+        type: NOUL
+        instructions: "Does this require urgent attention?"
 ```
+
+To set `apiKey` once for every TypeSafe task in a namespace, use plugin defaults on Kestra 1.x, or a [Policy](https://kestra.io/docs/enterprise/governance/policies) with an `Add` rule on Kestra 2.x Enterprise Edition.
 
 For a local, unauthenticated endpoint, configure `baseUrl` and omit `apiKey`:
 
