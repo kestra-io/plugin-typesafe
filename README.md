@@ -35,12 +35,14 @@
 </p>
 <p align="center" style="color:grey;"><i>Get started with Kestra in 3 minutes.</i></p>
 
-# Kestra Typesafe Plugin
+# Kestra TypeSafe Plugin
+
+Evaluate content from Kestra flows with Jev, the decision model from TypeSafe AI. Jev answers typed questions with one of the options you allow, a score, or a yes/no probability, so each flow step can branch on a structured answer instead of parsing free text.
 
 ## Why
 
 - What user problem does this solve? Teams need to evaluate content (support tickets, reviews, records) against calibrated, typed questions from orchestrated workflows instead of one-off scripts or manual review.
-- Why would a team adopt this plugin in a workflow? It keeps TypeSafe evaluation steps in the same Kestra flow as data preparation, retries, notifications, and downstream systems, with structured answers each step can branch on.
+- Why would a team adopt this plugin in a workflow? It keeps Jev evaluation steps in the same Kestra flow as data preparation, retries, notifications, and downstream systems, with structured answers each step can branch on.
 - What operational/business outcome does it enable? It reduces manual triage and fragmented tooling while improving reliability and traceability for processes that depend on consistent automated judgment.
 
 ## What

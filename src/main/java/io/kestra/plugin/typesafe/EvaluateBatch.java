@@ -57,8 +57,8 @@ import static io.kestra.core.utils.Rethrow.throwFunction;
 @Getter
 @NoArgsConstructor
 @Schema(
-    title = "Evaluate a dataset with TypeSafe",
-    description = "Evaluates every record of a dataset against a map of typed questions via the TypeSafe System One API, with bounded concurrency, and writes one `{\"state\", \"answers\"}` line per record — in input order — to an ION file."
+    title = "Evaluate a dataset with Jev",
+    description = "Evaluates every record of a dataset against a map of typed questions with Jev, through the TypeSafe System One API, with bounded concurrency. Writes one `{\"state\", \"answers\"}` line per record, in input order, to an ION file."
 )
 @Plugin(
     examples = {

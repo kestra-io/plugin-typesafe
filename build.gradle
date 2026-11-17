@@ -29,7 +29,7 @@ java {
 }
 
 group = "io.kestra.plugin"
-description = 'TypeSafe plugin for Kestra'
+description = 'TypeSafe plugin for Kestra: evaluate content with Jev, the decision model from TypeSafe AI'
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
